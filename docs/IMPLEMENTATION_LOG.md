@@ -1,0 +1,44 @@
+# Implementation log
+
+## 2026-11-04 flat cap update
+
+Final verification: release build succeeded; CTest 5/5 passed in 16.58 seconds (core, flat_cap, session, GUI, graphics_failure). Formatter check passed for all 17 C++ files. GUI test confirmed test-bowl estimated volume appears and disappears on cap toggle. Core fixture: 45,283.7 mm³ / 45.2837 mL. Synthetic fixture persistence and capped PLY face counts passed. Four-space indentation and single blank lines preserved.
+
+User selected a flat cap first; curved/tangent closure is deferred. Added independent boundary-loop cap/validation/volume module, background integration, orange cap rendering, selectable opening and rim tolerance, JSON settings/provenance and PLY cap export. A labeled synthetic bowl provides an interactive successful case with known topology. The live demo has branching boundaries and volume is correctly withheld; this remains a limitation of the point-cloud reconstruction.
+
+Tests observed failing before implementation: rectangular cap missing, cap settings roundtrip missing, GUI cap control missing. Core fixtures cover box volume (12 mm³), reversed winding/translation, concave prism (9 mm³), nonplanar rim rejection, extra gaps, folded-wall intersections, invalid opening, cancellation and known half-ellipsoid bowl (~45.2837 mL). Added fixture provenance persistence/rejection, PLY face-count and GUI volume on/off checks. Independent read-only review found no material defect; its minor request to assert volume rejection on the live-cloud fixture was implemented. Pi execution and physical accuracy remain unverified.
+
+Plan: docs/superpowers/plans/2026-11-04-viewer.md
+
+2026-11-04: Design approved; implementation authorized. No Git repository or product code exists. Work in the current project folder; no worktree/commits possible without creating a repository. CMake/Ninja and MSVC 14.44 are present. Qt/Eigen must be supplied locally.
+
+Interfaces preflight: Tasks 1/2 share Vec3; Task 3 serializes Snapshot and MeshSettings; Task 4 consumes these plus revision tokens. Keep core independent of Qt; JSON belongs in Qt adapter.
+
+Execution: inline, as requested (assistant programs; user reviews in Cursor).
+
+Task 1: complete. Capture/kinematics tests observed failing at valid capture, then passing through capture/freshness/wrap/known-angle checks. Regression for coordinate limits failed then passed.
+Task 2: complete. Reconstruction stub failed planar reconstruction; implementation passed bounded mesh checks. Stronger plane coverage test failed at 21 faces; local Delaunay candidates with deterministic connectivity perturbation now pass >=180 faces. Synthetic concave/open cavity and parallel-sheet checks pass.
+Task 3: complete. Persistence test failed at saveSession stub, then JSON round-trip, invalid schema, atomic destination preservation, NaN save rejection and CSV/PLY tests passed.
+Task 4: complete. GUI test failed missing controls before implementation; capture/undo/source/demo/graphics tests now pass. Live-scan surface regression failed, then passed after revision handling change.
+
+Ruling: Use a small explicit 3x3 Jacobi eigensolver rather than Eigen — no extra dependency for this one operation — numerical behavior requires planar/curved fixtures (passing).
+Ruling: Retain an earlier completed surface during append-only acquisition, labeled with the exact capture count used; only accept results newer than the displayed mesh and from the same destructive-change generation — enables progressive display without starvation — preview can lag the cloud but is clearly labeled. Undo/reset/load/settings invalidate and cancel all older-generation meshes. PLY exports mesh only at current revision; otherwise raw points.
+Environment: Initial Qt download hit missing certificate issuer; project-local pip-system-certs restored Windows certificate trust, download succeeded without disabling verification. MSVC debug compiler probe hit PDB manager mismatch; embedded /Z7 debug info resolved it. Release build uses no PDB dependency.
+Latest suite: 3 CTest executables passing (core, session, GUI), real Windows OpenGL context. Pi execution remains external/unverified.
+
+## Final verification and review
+
+2026-11-04: Fresh read-only independent review completed. Four material findings fixed:
+
+- Save/load size mismatch: regression with 100,000 angle captures and 256-character source strings failed on an oversized indented save, then passed with compact serialization and a pre-replacement 64 MiB size guard. Large session reopens successfully.
+- Space shortcut ownership: focused Undo regression failed, then passed after replacing the global shortcut with unhandled-key propagation. Viewport Space captures; numeric-editor Space does not.
+- No-context reporting: ordinary Qt fallback label added outside the GL paint path. Minimal-platform test passes; disabling the fallback made it fail with the expected missing-explanation message, then restoring it made it pass.
+- Save/load geometry mismatch: zero-axis save regression failed before write-side profile validation, then passed.
+
+The two minor findings were also addressed: shaders now use ES2-compatible fragment/varying precision; the GUI test resets a running acquisition and confirms that no prior mesh or captures reappear. No deferred review findings. Reviewer declined to certify Pi performance, physical geometry accuracy and mesh correctness; these remain explicitly unverified, with no such claims in the delivered UI/docs.
+
+Additional boundary regression: maximum signed timestamp was accepted without safe continuation headroom; test failed, then passed with a shared bounded timestamp domain on capture/write/load.
+
+Task 5: complete for the Windows simulator deliverable. Final release build succeeded. CTest: 4/4 passed (core, session, GUI, graphics_failure), 13.01 seconds. clang-format dry-run with warnings as errors passed. Real Windows renderer: NVIDIA GeForce RTX 4080, desktop OpenGL 4.6; application uses the documented ES2-common subset with desktop shader syntax. 6,000-point synthetic reconstruction produced 10,738 faces in 56 ms on this PC; no Pi speed inference. Visual inspection of docs/viewer-preview.png confirmed axes/grid, gold cloud, teal surface and all primary controls visible. Demo screenshot: 6,120 captures, 10,955 faces.
+
+Delivery: source in src/, test code in tests/, launcher Run MedicalWand.cmd, instructions README.md. No Git repository/branch exists, so merge/PR/worktree steps do not apply. Existing CAD and historical handoff content retained; CONTEXT.md now points to current implementation status.

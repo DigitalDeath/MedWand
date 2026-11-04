@@ -1,0 +1,5 @@
+/build*/
+/.tools/
+/.deps/
+*.user
+aqtinstall.log
