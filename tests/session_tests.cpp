@@ -3,6 +3,8 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <iostream>
 #include <stdexcept>
@@ -22,6 +24,7 @@ int main(int argc, char **argv) {
         original.settings.flatCap = true;
         original.settings.capTolerance = 0.75;
         original.settings.capOpening = 2;
+        original.settings.radialCavity = true;
         original.captures.capture(mw::simulate(12, 123), 123);
         original.captures.capture(mw::simulate(13, 124), 124);
         QString error, file = dir.filePath("session.json");
@@ -34,6 +37,26 @@ int main(int argc, char **argv) {
         require(copy.captures.points[0].timestampUs == 123, "timestamp preserved");
         require(copy.settings.flatCap && copy.settings.capTolerance == 0.75 && copy.settings.capOpening == 2,
             "cap settings survive session roundtrip");
+        require(copy.settings.radialCavity, "radial reconstruction choice survives roundtrip");
+        QFile current(file);
+        require(current.open(QIODevice::ReadOnly), "read new session for legacy fixture");
+        auto legacyRoot = QJsonDocument::fromJson(current.readAll()).object();
+        current.close();
+        auto legacySettings = legacyRoot["settings"].toObject();
+
+        for (const char *key : {"radial_cavity", "flat_cap", "cap_tolerance_mm", "cap_opening"})
+            legacySettings.remove(key);
+        legacyRoot["settings"] = legacySettings;
+        legacyRoot.remove("volume_test_bowl");
+        QFile legacyFile(dir.filePath("legacy.json"));
+        require(legacyFile.open(QIODevice::WriteOnly), "write legacy session");
+        legacyFile.write(QJsonDocument(legacyRoot).toJson());
+        legacyFile.close();
+        mw::Session legacy;
+        require(mw::loadSession(legacyFile.fileName(), legacy, error), "legacy session loads");
+        require(!legacy.settings.radialCavity && !legacy.settings.flatCap &&
+                legacy.settings.maxEdge == original.settings.maxEdge,
+            "legacy sessions retain local preview and stored connection limit");
         QFile bad(file);
         require(bad.open(QIODevice::WriteOnly), "write corrupt file");
         bad.write("{\"version\":99}");

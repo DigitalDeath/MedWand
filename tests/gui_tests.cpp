@@ -161,6 +161,39 @@ int main(int argc, char **argv) {
     }
 
     // Destructor safely cancels/joins the worker; no discard dialog needed.
+    QTest::mouseClick(demo, Qt::LeftButton);
+    QElapsedTimer scanClock;
+    scanClock.start();
+
+    while (count->text().section(' ', 0, 0).toInt() < 6000 && scanClock.elapsed() < 30000)
+        QTest::qWait(50);
+    QTest::mouseClick(demo, Qt::LeftButton);
+
+    if (count->text().section(' ', 0, 0).toInt() < 6000) {
+        std::cerr << "Regular demo did not reach test density\n";
+        return 1;
+    }
+
+    cap->setChecked(true);
+    QElapsedTimer volumeClock;
+    volumeClock.start();
+
+    while (!status->text().contains("Estimated volume:") && volumeClock.elapsed() < 6000)
+        QTest::qWait(50);
+
+    if (!status->text().contains("Estimated volume:")) {
+        std::cerr << "Regular scan/stop/cap workflow failed: " << status->text().toStdString() << '\n';
+        return 1;
+    }
+
+    std::cout << "Regular captured scan capped: " << status->text().toStdString() << '\n';
+    QTimer::singleShot(30, [] {
+        auto dialog = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+
+        if (dialog)
+            dialog->button(QMessageBox::Discard)->click();
+    });
+
     auto bowl = window.findChild<QPushButton *>("testBowl");
 
     if (!bowl)

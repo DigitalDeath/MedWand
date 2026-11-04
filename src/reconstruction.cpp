@@ -1,5 +1,6 @@
 #include "reconstruction.h"
 #include "flat_cap.h"
+#include "radial_reconstruction.h"
 #include <algorithm>
 #include <map>
 #include <set>
@@ -326,9 +327,10 @@ namespace mw {
 
     Mesh reconstruct(
         const std::vector<Vec3> &points, MeshSettings settings, const std::function<bool()> &cancel) {
-        Mesh mesh = reconstructOpen(points, settings, cancel);
+        Mesh mesh = settings.radialCavity ? reconstructRadial(points, settings, cancel)
+                                            : reconstructOpen(points, settings, cancel);
 
-        if (settings.flatCap && !mesh.cancelled)
+        if (settings.flatCap && !mesh.cancelled && !mesh.faces.empty())
             return closeFlatOpening(mesh, settings.capOpening, settings.capTolerance, cancel);
         return mesh;
     }

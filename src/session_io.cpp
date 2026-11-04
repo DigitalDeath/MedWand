@@ -124,7 +124,7 @@ namespace mw {
                 {"settings",
                     QJsonObject{{"merge_mm", s.settings.mergeDistance}, {"max_edge_mm", s.settings.maxEdge},
                         {"flat_cap", s.settings.flatCap}, {"cap_tolerance_mm", s.settings.capTolerance},
-                        {"cap_opening", s.settings.capOpening}}},
+                        {"cap_opening", s.settings.capOpening}, {"radial_cavity", s.settings.radialCavity}}},
                 {"captures", captures}};
         }
 
@@ -187,6 +187,9 @@ namespace mw {
             s.id = string(root["id"]);
             auto settings = root["settings"].toObject();
             s.settings = {number(settings["merge_mm"]), number(settings["max_edge_mm"])};
+
+            if (settings.contains("radial_cavity"))
+                s.settings.radialCavity = boolean(settings["radial_cavity"]);
 
             if (settings.contains("flat_cap"))
                 s.settings.flatCap = boolean(settings["flat_cap"]);

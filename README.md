@@ -38,9 +38,11 @@ Qt's `bin` must be on PATH when running the tests or application, unless the exe
 
 Reconstruction runs on one CPU worker and starts at most once per second. Append-only acquisition keeps the last completed preview visible; the panel says exactly how many captures that surface uses. Undo, new/load and settings changes cancel and invalidate old previews. A result from an earlier generation cannot reappear.
 
-The algorithm merges nearby points into a separate working cloud, estimates local PCA planes, and creates local tangent-plane Delaunay candidates. Normal, edge-length, degeneracy and edge-incidence checks reject unsupported connections. A tiny deterministic perturbation resolves connectivity ties without changing coordinates. Candidate work is bounded; sparse data can produce no triangles. Raw captures are never merged or moved.
+The default **Radial cavity (+Z opening)** mode derives a center and scale from the point cloud, voxel-filters a working copy, stereographically projects radial directions to a 2D disk, Delaunay-triangulates that disk, then lifts triangles back to the actual XYZ samples. This gives a coherent shell without substituting a known model or taking the convex hull in XYZ. Radial inward dents remain represented. It assumes one wall per direction around that center, full-around wall and floor coverage, and one opening toward +Z. It cannot reconstruct hidden undercuts or multiple radial layers reliably. These assumptions are displayed in the UI; use **Local surface preview** for geometry outside them.
 
-Merge distance and maximum connection distance govern estimated connectivity, not accuracy. Maximum connection must be at least twice merge distance. Reconstruction is capped at 20,000 working points, 32 neighbors per point and 40,000 faces; crowded spatial bins use bounded sampling. The panel reports when a limit affects a result. Raw session limit is 100,000 captures; display uses at most 20,000 representative points.
+Local preview retains the previous PCA/tangent-plane triangulation and can produce branching boundaries. It is useful for inspecting arbitrary samples but may not support volume. Raw captures are never merged or moved by either reconstruction mode. Cap projection affects only derived rim vertices within the selected tolerance.
+
+Merge distance and maximum connection distance govern estimated connectivity, not accuracy. Maximum connection must be at least twice merge distance. New sessions default to radial reconstruction with a **6 mm** connection limit. Triangles longer than that are omitted, leaving gaps instead of closing unsupported areas. Both modes cap working points at 20,000 and faces at 40,000; radial mode refuses an over-limit shell rather than claiming a volume from a truncated cloud. Its cancellable CPU triangulation has quadratic worst-case work, so Pi timing still needs measurement. Local mode uses at most 32 neighbors. Raw session limit is 100,000 captures; display uses at most 20,000 representative points.
 
 This local method can still create overlapping or incorrect patches near close sheets, sharp features or uneven coverage. It is an **open preview mesh**. Sparse measurements do not establish a solid or physical accuracy. The optional flat-cap operation below reports estimated volume only when the resulting mesh passes its geometric checks.
 
@@ -50,7 +52,9 @@ In **Surface preview**, enable **Flat cap + estimated volume**. Openings are ran
 
 The app checks closure, edge/vertex manifoldness, a single connected shell, consistent orientation and detected triangle intersections before calculating volume. Volume appears in mm³ and mL (1 mL = 1,000 mm³). It is an estimate defined by the added flat cap, not a measured closure surface or an accuracy certification. Other gaps and branching boundaries cause an explicit diagnostic and withhold volume. Tangent/curved caps are deferred.
 
-For a working geometric test, click **Load flat-cap test bowl** (discard unsaved changes only if you intend to replace the current session). This loads a clearly labeled synthetic, structured half-ellipsoid with radius 38 mm and depth 15 mm, then enables the cap. Its faceted volume is approximately **45,283.7 mm³ / 45.2837 mL**, within 0.3% of the ideal 45.3646 mL. The clean fixture uses known topology; it does not demonstrate that live point-cloud reconstruction is watertight. The current live scan demo has branching boundaries and correctly refuses volume. Capturing/undoing points or starting a scan exits fixture topology mode and returns to ordinary reconstruction.
+For the normal workflow, keep **Radial cavity (+Z opening)** selected, run **Start demo scan**, accumulate about **6,000 points**, stop the demo, then enable **Flat cap + estimated volume**. At the default 6 mm connection limit the ordinary captured demo cloud closes and gives approximately **86.6 mL**. An independent numerical integration of the simulated dented cavity gives 86.8043 mL; the 6,000-point mesh differs by about 0.2%. That validates this simulated dataset, not physical device accuracy. Sparse or missing-sector scans still withhold volume. More points alone do not justify an invalid radial assumption. Older saved sessions retain local preview unless you select radial mode.
+
+For a separate geometric check, **Load flat-cap test bowl** loads the clearly labeled structured half-ellipsoid fixture (38 mm radius, 15 mm depth). Its faceted volume is approximately **45.2837 mL**, within 0.3% of the ideal 45.3646 mL. This known-topology fixture remains distinct from the regular demo, whose new closure is reconstructed from captured points. Capturing/undoing points or starting a scan exits fixture mode.
 
 Cap settings and synthetic fixture provenance persist in JSON; older sessions default to no cap. PLY includes cap triangles and cap/volume comments when exporting a current mesh. Numeric volume disappears while a newer point/settings revision is processing.
 
@@ -88,7 +92,7 @@ Code uses four-space indentation, expanded function/lambda bodies and one blank 
 - `src/session_io.*`: versioned JSON and CSV/PLY boundaries; atomic file writes.
 - `src/viewer.*`: graphics context, shaders, layers and camera.
 - `src/main_window.*`: controls, source selection and worker lifecycle.
-- `tests/`: core fixtures, 100,000-capture file round-trip, interactive GUI smoke and no-graphics failure tests (four CTest cases).
+- `tests/`: core/cap geometry fixtures, 100,000-capture file round-trip, ordinary scan/stop/cap GUI regression and no-graphics failure tests (five CTest cases).
 - `docs/IMPLEMENTATION_LOG.md`: verified results and implementation decisions.
 - `docs/superpowers/specs/2026-11-04-point-cloud-viewer-design.md`: approved design.
 

@@ -8,7 +8,12 @@ namespace mw {
         bool volumeTestBowl = false;
         QString id;
         Geometry geometry = Geometry::fictional();
-        MeshSettings settings;
+        MeshSettings settings = [] {
+            MeshSettings value;
+            value.radialCavity = true;
+            value.maxEdge = 6;
+            return value;
+        }();
         CaptureStore captures;
     };
 

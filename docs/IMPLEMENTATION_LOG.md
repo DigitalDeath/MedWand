@@ -1,5 +1,15 @@
 # Implementation log
 
+## 2026-11-04 reconstruction v2
+
+User authorized regular scan → stop → cap/volume workflow. Added radial-cavity reconstruction in `src/radial_reconstruction.*`: voxel-filter a derived copy, infer center/scales from cloud bounds, stereographically map radial directions to a disk, perform cancellable Bowyer-Watson Delaunay triangulation and lift faces to actual XYZ samples. No simulator dimensions, formulas or fixture topology are used in this reconstruction. Local preview is retained. New sessions default to radial mode and 6 mm maximum connection; saved mode persists and legacy JSON without mode remains local preview.
+
+Ruling: explicit +Z opening / single radial layer assumption — permits a coherent shell for the present cavity while preserving radial dents — cannot represent arbitrary undercuts, unknown axis or multiple layers; assumptions are visible in UI/README. Center/scales are inferred, axis is constrained. Radial triangulation is bounded to 20,000 working points and quadratic worst-case CPU work; Pi timings remain unverified. Excess work limits withhold volume instead of silently closing a truncated cloud. Long unsupported connections are left out; sparse/missing-sector/multi-layer clouds do not report volume.
+
+Red/green: the original 6,000-point regular demo cloud initially failed the new closure assertion. At 4 mm connection the radial mesh leaves two unsupported gaps; at 6 mm it forms one valid opening and passes cap/volume checks. Core result: 11,539 wall faces, 86,641 mm³ compared with independent cross-section integration 86,804.3 mm³ (~0.19% difference). Different 20×12×10 ellipsoid agrees with analytic volume within 1.5%; translated/reversed cloud and nonzero sequence offset997 pass. Missing angular wedge, nested layers, sparse40points and demo500/1000points withhold volume. Density sweep:2000/3000/4000/6000 close for this deterministic scan, but6000 is the documented comparison density. Mid-work cancellation passes.
+
+Final verification: `scripts/build-windows.cmd -DMEDWAND_GUI=ON -DMEDWAND_VIEWER=ON` succeeded; CTest5/5 passed in31.98s (core, flat_cap, session, GUI, graphics_failure). GUI test now runs the actual ordinary demo to ≥6000captures, stops it, enables cap, and requires an estimated volume before loading any known fixture. Legacy JSON and current mode persistence assertions pass. Formatter `--check` passed all19C++files. No running user app was killed or unsaved user data discarded. Parent handles independent review and delivery.
+
 ## 2026-11-04 flat cap update
 
 Final verification: release build succeeded; CTest 5/5 passed in 16.58 seconds (core, flat_cap, session, GUI, graphics_failure). Formatter check passed for all 17 C++ files. GUI test confirmed test-bowl estimated volume appears and disappears on cap toggle. Core fixture: 45,283.7 mm³ / 45.2837 mL. Synthetic fixture persistence and capped PLY face counts passed. Four-space indentation and single blank lines preserved.

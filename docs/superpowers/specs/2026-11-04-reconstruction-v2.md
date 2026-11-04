@@ -1,0 +1,7 @@
+# Reconstruction v2
+
+Implement a coherent radial-shell reconstruction mode for a single cavity with an opening along +Z. Normalize the cloud bounding box, project radial directions stereographically from the opening pole, and triangulate that 2D disk with Delaunay triangulation. Lift triangles back to the captured XYZ points. This is not a convex hull in XYZ: inward dents are preserved when each direction meets one wall. It assumes one radial layer about the estimated center and cannot validate hidden folds from incomplete measurements. Keep the original local preview available; label the radial assumption explicitly in UI and saved settings.
+
+Honor connection-distance limits: triangles bridging unsupported distances remain absent and volume is unavailable. Preserve sparse/partial coverage and all raw samples. Bound input processing and triangulation; cancellation and generation gating remain in the existing worker. Do not use simulator parameters or known test-bowl topology for ordinary capture data. Flat cap remains explicit.
+
+Plan: add actual point-cloud closure/volume regressions first; implement projection/Delaunay and conservative coverage gates; integrate mode persistence and UI defaults; test known ellipsoid/dented cloud and incomplete/wrong-layer fixtures; run formatter and full suite. Parent performs independent review. No Git repository exists. Work is authorized without another approval prompt.

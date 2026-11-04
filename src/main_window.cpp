@@ -215,6 +215,14 @@ namespace mw {
         acquire->addWidget(pointCount_);
 
         auto surface = group("03   SURFACE PREVIEW");
+        reconstructionMode_ = new QComboBox;
+        reconstructionMode_->setObjectName("reconstructionMode");
+        reconstructionMode_->addItems({"Radial cavity (+Z opening)", "Local surface preview"});
+        reconstructionMode_->setToolTip(
+            "Radial mode assumes one wall per direction around the cloud center, a single opening along +Z, "
+            "and full-around wall/floor coverage. It cannot represent hidden undercuts or multiple layers. "
+            "Local mode preserves unsupported topology as gaps.");
+        surface->addWidget(reconstructionMode_);
         auto settings = new QGridLayout;
         merge_ = new QDoubleSpinBox;
         merge_->setRange(0.01, 50);
@@ -291,6 +299,7 @@ namespace mw {
             }
 
             session_.settings = {merge_->value(), edge_->value()};
+            session_.settings.radialCavity = reconstructionMode_->currentIndex() == 0;
             session_.settings.flatCap = flatCap_->isChecked();
             session_.settings.capTolerance = capTolerance_->value();
             session_.settings.capOpening = capOpening_->value() - 1;
@@ -304,14 +313,16 @@ namespace mw {
         connect(flatCap_, &QCheckBox::toggled, this, settingsChanged);
         connect(capTolerance_, &QDoubleSpinBox::valueChanged, this, settingsChanged);
         connect(capOpening_, &QSpinBox::valueChanged, this, settingsChanged);
+        connect(reconstructionMode_, &QComboBox::currentIndexChanged, this, settingsChanged);
         capTolerance_->setEnabled(false);
         capOpening_->setEnabled(false);
         meshStatus_ = new QLabel;
         meshStatus_->setObjectName("meshStatus");
         meshStatus_->setWordWrap(true);
         surface->addWidget(meshStatus_);
-        auto notice = new QLabel("Orange = added flat cap. Volume is an estimate relative to that cap; "
-                                    "remaining gaps or mesh defects prevent volume reporting.");
+        auto notice = new QLabel("Radial mode: one wall per direction, opening along +Z. Hidden "
+                                    "folds/undercuts need another reconstruction method. Orange = inferred flat "
+                                    "cap. Volume is an estimate; insufficient coverage remains a gap.");
         notice->setWordWrap(true);
         notice->setStyleSheet("color:#8ea8bb");
         surface->addWidget(notice);
@@ -579,6 +590,9 @@ namespace mw {
         if (pending_ || worker_.valid())
             text += "\nUpdating surface…";
 
+        if (!session_.settings.flatCap && !mesh_.capStatus.empty())
+            text += "\n" + QString::fromStdString(mesh_.capStatus);
+
         if (session_.settings.flatCap && meshRevision_) {
             text += QString("\n%1 openings · %2 cap triangles\n%3")
                         .arg(mesh_.openings)
@@ -675,12 +689,14 @@ namespace mw {
         for (const auto &s : replay_)
             sequence_ = std::max(sequence_, s.sequence + 1);
         {
-            QSignalBlocker a(merge_), b(edge_), c(flatCap_), d(capTolerance_), e(capOpening_);
+            QSignalBlocker a(merge_), b(edge_), c(flatCap_), d(capTolerance_), e(capOpening_),
+                f(reconstructionMode_);
             merge_->setValue(session_.settings.mergeDistance);
             edge_->setValue(session_.settings.maxEdge);
             flatCap_->setChecked(session_.settings.flatCap);
             capTolerance_->setValue(session_.settings.capTolerance);
             capOpening_->setValue(session_.settings.capOpening + 1);
+            reconstructionMode_->setCurrentIndex(session_.settings.radialCavity ? 0 : 1);
             capTolerance_->setEnabled(session_.settings.flatCap);
             capOpening_->setEnabled(session_.settings.flatCap);
         }

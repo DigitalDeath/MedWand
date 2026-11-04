@@ -8,6 +8,7 @@ namespace mw {
         bool flatCap = false;
         double capTolerance = 0.5;
         int capOpening = 0;
+        bool radialCavity = false;
     };
 
     struct Mesh {

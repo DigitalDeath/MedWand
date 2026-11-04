@@ -109,7 +109,123 @@ int main() {
             return false;
         });
 
-        require(!result.volumeValid, "current fragmented point cloud cannot report a volume");
+        require(!result.volumeValid, "local preview still withholds volume for fragmented geometry");
+        settings.radialCavity = true;
+        settings.maxEdge = 6;
+        result = reconstruct(cloud, settings, [] {
+            return false;
+        });
+
+        std::cout << "Radial diagnostic: " << result.capStatus << " faces=" << result.faces.size()
+                    << " openings=" << result.openings << '\n';
+        require(result.volumeValid, "ordinary captured demo cloud closes in radial cavity mode");
+        double reference = 0;
+        constexpr int steps = 400;
+
+        for (int i = 0; i < steps; ++i) {
+            double theta = 0.3 + (pi - 0.3) * (i + 0.5) / steps;
+
+            for (int j = 0; j < steps; ++j) {
+                double phi = 2 * pi * (j + 0.5) / steps;
+                double radiusFactor =
+                    1 - 0.30 * std::exp(-std::pow((phi - pi) / 0.48, 2) - std::pow((theta - 1.5) / 0.5, 2));
+                reference += std::pow(std::sin(theta), 3) * radiusFactor * radiusFactor;
+            }
+        }
+
+        reference *= 38 * 38 * 15 / 2.0 * (pi - 0.3) / steps * 2 * pi / steps;
+        require(std::abs(result.volumeMm3 - reference) / reference < 0.015,
+            "dented cavity mesh agrees with independently integrated cross-section volume within 1.5 "
+            "percent");
+        std::cout << "Independent integrated cavity volume: " << reference << " mm3\n";
+        std::vector<Vec3> translated = cloud;
+        std::reverse(translated.begin(), translated.end());
+
+        for (auto &p : translated)
+            p = p + Vec3{50, -20, 30};
+        auto shifted = reconstruct(translated, settings, [] {
+            return false;
+        });
+
+        require(shifted.volumeValid && std::abs(shifted.volumeMm3 - reference) / reference < 0.015,
+            "translated cavity remains data-derived and volume stable");
+        std::vector<Vec3> offsetCloud;
+
+        for (int i = 997; i < 6997; ++i)
+            offsetCloud.push_back(simulate(i, 0).position);
+        auto offsetResult = reconstruct(offsetCloud, settings, [] {
+            return false;
+        });
+
+        require(offsetResult.volumeValid && std::abs(offsetResult.volumeMm3 - reference) / reference < 0.015,
+            "nonzero demo sequence offset closes with stable volume");
+        std::vector<Vec3> ellipsoid;
+
+        for (int i = 0; i < 6000; ++i) {
+            double theta = 0.4 + (pi - 0.401) * (i + 0.5) / 6000.0,
+                    phi = 2 * pi * std::fmod(i * 0.6180339887498948, 1.0);
+            ellipsoid.push_back({20 * std::sin(theta) * std::cos(phi), 12 * std::sin(theta) * std::sin(phi),
+                10 * std::cos(theta)});
+        }
+
+        auto other = reconstruct(ellipsoid, settings, [] {
+            return false;
+        });
+
+        double z = std::cos(0.4), otherReference = pi * 20 * 12 * 10 * (z - z * z * z / 3 + 2.0 / 3);
+        require(other.volumeValid && std::abs(other.volumeMm3 - otherReference) / otherReference < 0.015,
+            "different ellipsoid closes without simulator dimensions");
+        std::vector<Vec3> partial;
+
+        for (auto p : cloud)
+
+            if (std::atan2(p.y, p.x) < 1.0 || std::atan2(p.y, p.x) > 2.0)
+                partial.push_back(p);
+        require(!reconstruct(partial, settings,
+                    [] {
+                        return false;
+                    })
+                    .volumeValid,
+            "large unscanned wedge cannot report volume");
+        std::vector<Vec3> sparse(cloud.begin(), cloud.begin() + 40);
+        require(!reconstruct(sparse, settings,
+                    [] {
+                        return false;
+                    })
+                    .volumeValid,
+            "sparse radial input cannot report volume");
+        auto layers = ellipsoid;
+
+        for (auto p : ellipsoid)
+            layers.push_back(p * 0.6);
+        require(!reconstruct(layers, settings,
+                    [] {
+                        return false;
+                    })
+                    .volumeValid,
+            "nested radial layers cannot report volume");
+        int cancellationChecks = 0;
+        auto interrupted = reconstruct(cloud, settings, [&] {
+            return ++cancellationChecks > 60;
+        });
+
+        require(interrupted.cancelled && !interrupted.volumeValid,
+            "radial triangulation obeys mid-work cancellation");
+
+        for (int density : {500, 1000, 2000, 3000, 4000, 6000}) {
+            std::vector<Vec3> sample(cloud.begin(), cloud.begin() + density);
+            auto probe = reconstruct(sample, settings, [] {
+                return false;
+            });
+
+            if (density <= 1000)
+                require(!probe.volumeValid, "insufficient demo density cannot report radial volume");
+
+            std::cout << "Density " << density << ": " << (probe.volumeValid ? "closed" : "incomplete")
+                        << " - " << probe.capStatus << '\n';
+        }
+
+        std::cout << "Captured cloud estimated volume: " << result.volumeMm3 << " mm3\n";
 
         std::cout << "Current point-cloud preview cap status: " << result.capStatus << '\n';
         std::cout << "Flat cap checks passed\n";

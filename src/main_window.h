@@ -54,6 +54,7 @@ namespace mw {
         QCheckBox *flatCap_ = nullptr;
         QDoubleSpinBox *capTolerance_ = nullptr;
         QSpinBox *capOpening_ = nullptr;
+        QComboBox *reconstructionMode_ = nullptr;
         QCheckBox *pointLayer_ = nullptr, *surfaceLayer_ = nullptr;
         QTimer sampleTimer_, workerTimer_, demoTimer_;
         QElapsedTimer clock_;
