@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=MedicalWand
+Comment=Capture cavity points and inspect estimated surfaces
+Exec=MedicalWand
+TryExec=MedicalWand
+Icon=applications-science
+Terminal=false
+Categories=Science;Engineering;
+StartupNotify=true

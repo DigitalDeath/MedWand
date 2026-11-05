@@ -87,6 +87,28 @@ Rendering requests ES 2.0 on Linux and desktop OpenGL 2.1 on Windows. Both paths
 
 Pi acceptance still required: verify ES shader compilation and all controls; test 20,000 points/40,000 faces at 1280×720, aiming for 30 FPS and <256 MB application memory; record frame/mesh times, memory and graphics diagnostics. Targets are unverified. For the core timing fixture, run `./build-pi/core_tests` (reports a 6,000-point reconstruction time). Benchmark rendering while orbiting, with reconstruction active; lower budgets if needed.
 
+## Raspberry Pi Debian installer
+
+Build the installer on the target Pi OS release. CPack records the native Debian architecture and discovers linked runtime dependencies with dpkg-shlibdeps. For the current Debian 13 ARM64 Pi, run:
+
+```bash
+sudo apt install dpkg-dev
+cd ~/MedWand
+git pull --ff-only
+cmake -S . -B build-pi -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-pi -j2
+ctest --test-dir build-pi --output-on-failure
+cpack --config build-pi/CPackConfig.cmake -G DEB -B build-pi/packages
+```
+
+The initial installer is `build-pi/packages/medicalwand_0.1.0-1_arm64.deb`. Copy it to another Pi running the same Debian release and architecture, then install with:
+
+```bash
+sudo apt install ./medicalwand_0.1.0-1_arm64.deb
+```
+
+APT installs the required Qt/OpenGL runtime dependencies (an internet connection or configured package mirror is needed when they are missing). The target Pi does not need a compiler or Qt development packages. Launch MedicalWand from the desktop application menu or run `MedicalWand` in a desktop terminal. Uninstall with `sudo apt remove medicalwand`. Sessions saved in your own folders are not part of the package. This package is not a Windows installer, does not install Raspberry Pi OS or configure SPI, and is not guaranteed compatible with older Debian releases. Native package creation and installation must still be verified on the Pi.
+
 ## Files for review
 
 Code uses four-space indentation, expanded function/lambda bodies and one blank line between logical blocks. Run `python scripts/format-code.py --clang-format <path-to-clang-format>` to maintain these conventions, or add `--check` to verify without editing. The script applies `.clang-format` and single-line block spacing; use it instead of a bare format-on-save command.
