@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
         mw::Session original;
         original.id = "test-session";
         original.settings.flatCap = true;
+        original.settings.curvedCap = true;
         original.settings.capTolerance = 0.75;
         original.settings.capOpening = 2;
         original.settings.radialCavity = true;
@@ -37,6 +38,7 @@ int main(int argc, char **argv) {
         require(copy.captures.points[0].timestampUs == 123, "timestamp preserved");
         require(copy.settings.flatCap && copy.settings.capTolerance == 0.75 && copy.settings.capOpening == 2,
             "cap settings survive session roundtrip");
+        require(copy.settings.curvedCap, "curved closure choice survives roundtrip");
         require(copy.settings.radialCavity, "radial reconstruction choice survives roundtrip");
         QFile current(file);
         require(current.open(QIODevice::ReadOnly), "read new session for legacy fixture");
@@ -44,7 +46,7 @@ int main(int argc, char **argv) {
         current.close();
         auto legacySettings = legacyRoot["settings"].toObject();
 
-        for (const char *key : {"radial_cavity", "flat_cap", "cap_tolerance_mm", "cap_opening"})
+        for (const char *key : {"curved_cap", "radial_cavity", "flat_cap", "cap_tolerance_mm", "cap_opening"})
             legacySettings.remove(key);
         legacyRoot["settings"] = legacySettings;
         legacyRoot.remove("volume_test_bowl");
@@ -54,7 +56,7 @@ int main(int argc, char **argv) {
         legacyFile.close();
         mw::Session legacy;
         require(mw::loadSession(legacyFile.fileName(), legacy, error), "legacy session loads");
-        require(!legacy.settings.radialCavity && !legacy.settings.flatCap &&
+        require(!legacy.settings.curvedCap && !legacy.settings.radialCavity && !legacy.settings.flatCap &&
                 legacy.settings.maxEdge == original.settings.maxEdge,
             "legacy sessions retain local preview and stored connection limit");
         QFile bad(file);
@@ -116,6 +118,19 @@ int main(int argc, char **argv) {
         require(contents.contains(
                     "element face " + QByteArray::number(closed.faces.size() + closed.capFaces.size())),
             "PLY includes wall and cap face counts");
+        capped.close();
+        bowl.settings.curvedCap = true;
+        auto curvedClosed = mw::closeCurvedOpening(fixture, 0, [] {
+            return false;
+        });
+
+        require(mw::exportPly(capFile, bowl, &curvedClosed, error), "export curved cap");
+        require(capped.open(QIODevice::ReadOnly), "read curved PLY");
+        auto curvedContents = capped.readAll();
+        require(curvedContents.contains("comment added_curved_cap_faces "),
+            "PLY identifies inferred curved closure");
+        require(curvedContents.contains("element vertex " + QByteArray::number(curvedClosed.vertices.size())),
+            "PLY includes curved interior vertices");
         bowl.captures.points[0].position.x += 1;
         require(!mw::saveSession(file, bowl, error), "edited data cannot retain known fixture topology");
         std::cout << "Session checks passed\n";

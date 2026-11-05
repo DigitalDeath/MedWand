@@ -73,6 +73,7 @@ namespace mw {
         views->addItems({"Perspective", "Top (XY)", "Front (XZ)", "Side (YZ)"});
         tools->addWidget(views);
         pointLayer_ = new QCheckBox("Points");
+        pointLayer_->setObjectName("pointsLayer");
         pointLayer_->setChecked(true);
         tools->addWidget(pointLayer_);
         surfaceLayer_ = new QCheckBox("Estimated surface");
@@ -237,9 +238,14 @@ namespace mw {
         settings->addWidget(new QLabel("Max. connection (mm)"), 1, 0);
         settings->addWidget(edge_, 1, 1);
         surface->addLayout(settings);
-        flatCap_ = new QCheckBox("Flat cap + estimated volume");
+        flatCap_ = new QCheckBox("Close opening + estimated volume");
         flatCap_->setObjectName("flatCap");
         surface->addWidget(flatCap_);
+        curvedCap_ = new QCheckBox("Curved lid (follow wall curvature)");
+        curvedCap_->setObjectName("curvedCap");
+        curvedCap_->setToolTip("Continues the nearby wall slope and curvature from a fixed rim. The interior "
+                                "is estimated, not measured. Uncheck for a flat cap.");
+        surface->addWidget(curvedCap_);
         capOpening_ = new QSpinBox;
         capOpening_->setRange(1, 10000);
         capOpening_->setPrefix("Opening # ");
@@ -255,7 +261,7 @@ namespace mw {
         capTolerance_->setToolTip("Maximum displacement of derived rim vertices onto the fitted cap plane. "
                                     "Raw captures are unchanged.");
         surface->addWidget(capTolerance_);
-        auto testBowl = new QPushButton("Load flat-cap test bowl");
+        auto testBowl = new QPushButton("Load cap test bowl");
         testBowl->setObjectName("testBowl");
         testBowl->setToolTip(
             "Synthetic half-ellipsoid: radius 38 mm, depth 15 mm. Tests a known clean mesh.");
@@ -293,6 +299,8 @@ namespace mw {
         });
 
         auto settingsChanged = [this] {
+            const auto previous = session_.settings;
+
             if (edge_->value() < 2 * merge_->value()) {
                 QSignalBlocker blocker(edge_);
                 edge_->setValue(2 * merge_->value());
@@ -301,27 +309,34 @@ namespace mw {
             session_.settings = {merge_->value(), edge_->value()};
             session_.settings.radialCavity = reconstructionMode_->currentIndex() == 0;
             session_.settings.flatCap = flatCap_->isChecked();
+            session_.settings.curvedCap = curvedCap_->isChecked();
             session_.settings.capTolerance = capTolerance_->value();
             session_.settings.capOpening = capOpening_->value() - 1;
-            capTolerance_->setEnabled(flatCap_->isChecked());
+            capTolerance_->setEnabled(flatCap_->isChecked() && !curvedCap_->isChecked());
+            curvedCap_->setEnabled(flatCap_->isChecked());
             capOpening_->setEnabled(flatCap_->isChecked());
-            changed();
+            bool sameWallSettings = previous.mergeDistance == session_.settings.mergeDistance &&
+                previous.maxEdge == session_.settings.maxEdge &&
+                previous.radialCavity == session_.settings.radialCavity;
+            changed(true, sameWallSettings);
         };
 
         connect(merge_, &QDoubleSpinBox::valueChanged, this, settingsChanged);
         connect(edge_, &QDoubleSpinBox::valueChanged, this, settingsChanged);
         connect(flatCap_, &QCheckBox::toggled, this, settingsChanged);
+        connect(curvedCap_, &QCheckBox::toggled, this, settingsChanged);
         connect(capTolerance_, &QDoubleSpinBox::valueChanged, this, settingsChanged);
         connect(capOpening_, &QSpinBox::valueChanged, this, settingsChanged);
         connect(reconstructionMode_, &QComboBox::currentIndexChanged, this, settingsChanged);
         capTolerance_->setEnabled(false);
+        curvedCap_->setEnabled(false);
         capOpening_->setEnabled(false);
         meshStatus_ = new QLabel;
         meshStatus_->setObjectName("meshStatus");
         meshStatus_->setWordWrap(true);
         surface->addWidget(meshStatus_);
         auto notice = new QLabel("Radial mode: one wall per direction, opening along +Z. Hidden "
-                                    "folds/undercuts need another reconstruction method. Orange = inferred flat "
+                                    "folds/undercuts need another reconstruction method. Orange = inferred "
                                     "cap. Volume is an estimate; insufficient coverage remains a gap.");
         notice->setWordWrap(true);
         notice->setStyleSheet("color:#8ea8bb");
@@ -492,7 +507,7 @@ namespace mw {
             statusBar()->showMessage(QString::fromStdString(session_.captures.error), 5000);
     }
 
-    void MainWindow::changed(bool invalidateMesh) {
+    void MainWindow::changed(bool invalidateMesh, bool preserveWall) {
         revision_.change();
 
         if (invalidateMesh) {
@@ -500,9 +515,19 @@ namespace mw {
 
             if (cancel_)
                 cancel_->store(true);
-            mesh_ = {};
-            meshRevision_ = 0;
-            meshPointCount_ = 0;
+
+            if (preserveWall && !mesh_.faces.empty()) {
+                mesh_.capFaces.clear();
+                mesh_.volumeValid = false;
+                mesh_.volumeMm3 = 0;
+                mesh_.capStatus = "Closure settings changed; showing the previous wall while updating.";
+            } else {
+                mesh_ = {};
+                meshRevision_ = 0;
+                meshPointCount_ = 0;
+            }
+
+            reconstructionFailure_.clear();
         }
 
         pending_ = !session_.captures.points.empty();
@@ -522,10 +547,20 @@ namespace mw {
 
                 if (!result.cancelled && generation_.accepts(jobGeneration_) &&
                     jobRevision_ >= meshRevision_) {
-                    mesh_ = std::move(result);
-                    meshRevision_ = jobRevision_;
-                    meshPointCount_ = jobPointCount_;
-                    refreshView();
+                    if (result.faces.empty()) {
+                        reconstructionFailure_ = result.limited
+                            ? "Reconstruction reached its work limit without a surface."
+                            : "Reconstruction produced no surface for the latest captures.";
+
+                        if (!result.capStatus.empty())
+                            reconstructionFailure_ += " " + QString::fromStdString(result.capStatus);
+                    } else {
+                        mesh_ = std::move(result);
+                        meshRevision_ = jobRevision_;
+                        meshPointCount_ = jobPointCount_;
+                        reconstructionFailure_.clear();
+                        refreshView();
+                    }
                 }
             } catch (const std::exception &e) {
                 statusBar()->showMessage(QString("Reconstruction failed: ") + e.what());
@@ -553,6 +588,11 @@ namespace mw {
                 std::async(std::launch::async, [points = std::move(points), settings, cancel, volumeTest] {
                     if (volumeTest) {
                         auto mesh = makeCapTestBowl();
+
+                        if (settings.flatCap && settings.curvedCap)
+                            return closeCurvedOpening(mesh, settings.capOpening, [cancel] {
+                                return cancel->load();
+                            });
 
                         if (settings.flatCap)
                             return closeFlatOpening(
@@ -589,6 +629,13 @@ namespace mw {
 
         if (pending_ || worker_.valid())
             text += "\nUpdating surface…";
+
+        if (!reconstructionFailure_.isEmpty()) {
+            text += "\n" + reconstructionFailure_;
+
+            if (!mesh_.faces.empty())
+                text += "\nShowing the previous surface; latest captures are not included.";
+        }
 
         if (!session_.settings.flatCap && !mesh_.capStatus.empty())
             text += "\n" + QString::fromStdString(mesh_.capStatus);
@@ -690,14 +737,16 @@ namespace mw {
             sequence_ = std::max(sequence_, s.sequence + 1);
         {
             QSignalBlocker a(merge_), b(edge_), c(flatCap_), d(capTolerance_), e(capOpening_),
-                f(reconstructionMode_);
+                curvedBlock(curvedCap_), f(reconstructionMode_);
             merge_->setValue(session_.settings.mergeDistance);
             edge_->setValue(session_.settings.maxEdge);
             flatCap_->setChecked(session_.settings.flatCap);
+            curvedCap_->setChecked(session_.settings.curvedCap);
+            curvedCap_->setEnabled(session_.settings.flatCap);
             capTolerance_->setValue(session_.settings.capTolerance);
             capOpening_->setValue(session_.settings.capOpening + 1);
             reconstructionMode_->setCurrentIndex(session_.settings.radialCavity ? 0 : 1);
-            capTolerance_->setEnabled(session_.settings.flatCap);
+            capTolerance_->setEnabled(session_.settings.flatCap && !session_.settings.curvedCap);
             capOpening_->setEnabled(session_.settings.flatCap);
         }
 

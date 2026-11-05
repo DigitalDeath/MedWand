@@ -330,8 +330,12 @@ namespace mw {
         Mesh mesh = settings.radialCavity ? reconstructRadial(points, settings, cancel)
                                             : reconstructOpen(points, settings, cancel);
 
-        if (settings.flatCap && !mesh.cancelled && !mesh.faces.empty())
+        if (settings.flatCap && !mesh.cancelled && !mesh.faces.empty()) {
+            if (settings.curvedCap)
+                return closeCurvedOpening(mesh, settings.capOpening, cancel);
             return closeFlatOpening(mesh, settings.capOpening, settings.capTolerance, cancel);
+        }
+
         return mesh;
     }
 } // namespace mw

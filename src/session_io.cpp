@@ -123,8 +123,9 @@ namespace mw {
                         {"probe", json(s.geometry.probe)}, {"joints", joints}}},
                 {"settings",
                     QJsonObject{{"merge_mm", s.settings.mergeDistance}, {"max_edge_mm", s.settings.maxEdge},
-                        {"flat_cap", s.settings.flatCap}, {"cap_tolerance_mm", s.settings.capTolerance},
-                        {"cap_opening", s.settings.capOpening}, {"radial_cavity", s.settings.radialCavity}}},
+                        {"flat_cap", s.settings.flatCap}, {"curved_cap", s.settings.curvedCap},
+                        {"cap_tolerance_mm", s.settings.capTolerance}, {"cap_opening", s.settings.capOpening},
+                        {"radial_cavity", s.settings.radialCavity}}},
                 {"captures", captures}};
         }
 
@@ -190,6 +191,9 @@ namespace mw {
 
             if (settings.contains("radial_cavity"))
                 s.settings.radialCavity = boolean(settings["radial_cavity"]);
+
+            if (settings.contains("curved_cap"))
+                s.settings.curvedCap = boolean(settings["curved_cap"]);
 
             if (settings.contains("flat_cap"))
                 s.settings.flatCap = boolean(settings["flat_cap"]);
@@ -306,7 +310,9 @@ namespace mw {
             out << "ply\nformat ascii 1.0\ncomment MedicalWand units mm; estimated geometry\n";
 
             if (faces)
-                out << "comment added_flat_cap_faces " << mesh->capFaces.size() << '\n';
+                out << (s.settings.curvedCap ? "comment added_curved_cap_faces "
+                                                : "comment added_flat_cap_faces ")
+                    << mesh->capFaces.size() << '\n';
 
             if (faces && mesh->volumeValid)
                 out << "comment estimated_volume_mm3 " << mesh->volumeMm3 << '\n';

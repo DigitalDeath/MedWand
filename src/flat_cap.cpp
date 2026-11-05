@@ -1,4 +1,5 @@
 #include "flat_cap.h"
+#include "curved_cap.h"
 #include <algorithm>
 #include <map>
 #include <numeric>
@@ -284,8 +285,8 @@ namespace mw {
         }
     } // namespace
 
-    Mesh closeFlatOpening(
-        const Mesh &input, int opening, double tolerance, const std::function<bool()> &cancel) {
+    static Mesh closeOpening(
+        const Mesh &input, int opening, double tolerance, const std::function<bool()> &cancel, bool curved) {
         Mesh result = input;
         result.capFaces.clear();
         result.volumeValid = false;
@@ -419,10 +420,12 @@ namespace mw {
             Vec3 d = input.vertices[id] - center;
             double distance = dot(d, normal);
 
-            if (std::abs(distance) > tolerance + eps)
+            if (!curved && std::abs(distance) > tolerance + eps)
                 return fail(
                     "Rim is not flat within tolerance; select another opening or increase tolerance.");
-            result.vertices[id] = input.vertices[id] - normal * distance;
+
+            if (!curved)
+                result.vertices[id] = input.vertices[id] - normal * distance;
             polygon.push_back({dot(d, u), dot(d, v)});
         }
 
@@ -444,51 +447,66 @@ namespace mw {
                     return fail("Opening boundary intersects itself.");
             }
 
-        std::vector<int> remaining(rim.size());
-        std::iota(remaining.begin(), remaining.end(), 0);
+        if (curved) {
+            // A radial patch requires the chosen center to see every rim edge.
 
-        while (remaining.size() > 3) {
-            if (cancel()) {
-                result.cancelled = true;
-                return result;
+            for (size_t i = 0; i < rim.size(); ++i) {
+                if (turn(polygon[i], polygon[(i + 1) % rim.size()], {0, 0}) <= eps * scale)
+                    return fail(
+                        "Curved cap needs a rim visible from its center; use flat cap for this opening.");
             }
 
-            bool found = false;
+            std::string error;
 
-            for (size_t i = 0; i < remaining.size(); ++i) {
-                int a = remaining[(i + remaining.size() - 1) % remaining.size()], b = remaining[i],
-                    c = remaining[(i + 1) % remaining.size()];
+            if (!buildCurvedCap(result, input, rim, cancel, error))
+                return fail(error);
+        } else {
+            std::vector<int> remaining(rim.size());
+            std::iota(remaining.begin(), remaining.end(), 0);
 
-                if (turn(polygon[a], polygon[b], polygon[c]) <= eps * scale)
-                    continue;
-                bool blocked = false;
+            while (remaining.size() > 3) {
+                if (cancel()) {
+                    result.cancelled = true;
+                    return result;
+                }
 
-                for (int p : remaining)
+                bool found = false;
 
-                    if (p != a && p != b && p != c &&
-                        inside(polygon[p], polygon[a], polygon[b], polygon[c], eps * scale))
-                        blocked = true;
+                for (size_t i = 0; i < remaining.size(); ++i) {
+                    int a = remaining[(i + remaining.size() - 1) % remaining.size()], b = remaining[i],
+                        c = remaining[(i + 1) % remaining.size()];
 
-                if (blocked)
-                    continue;
-                result.capFaces.push_back({rim[a], rim[b], rim[c]});
-                remaining.erase(remaining.begin() + i);
-                found = true;
-                break;
+                    if (turn(polygon[a], polygon[b], polygon[c]) <= eps * scale)
+                        continue;
+                    bool blocked = false;
+
+                    for (int p : remaining)
+
+                        if (p != a && p != b && p != c &&
+                            inside(polygon[p], polygon[a], polygon[b], polygon[c], eps * scale))
+                            blocked = true;
+
+                    if (blocked)
+                        continue;
+                    result.capFaces.push_back({rim[a], rim[b], rim[c]});
+                    remaining.erase(remaining.begin() + i);
+                    found = true;
+                    break;
+                }
+
+                if (!found) {
+                    result.capFaces.clear();
+                    return fail("Opening could not be triangulated without degeneracy.");
+                }
             }
 
-            if (!found) {
+            if (turn(polygon[remaining[0]], polygon[remaining[1]], polygon[remaining[2]]) <= eps * scale) {
                 result.capFaces.clear();
-                return fail("Opening could not be triangulated without degeneracy.");
+                return fail("Cap has a degenerate final triangle.");
             }
-        }
 
-        if (turn(polygon[remaining[0]], polygon[remaining[1]], polygon[remaining[2]]) <= eps * scale) {
-            result.capFaces.clear();
-            return fail("Cap has a degenerate final triangle.");
+            result.capFaces.push_back({rim[remaining[0]], rim[remaining[1]], rim[remaining[2]]});
         }
-
-        result.capFaces.push_back({rim[remaining[0]], rim[remaining[1]], rim[remaining[2]]});
 
         if (loops.size() != 1)
             return fail(
@@ -500,7 +518,9 @@ namespace mw {
 
             if (norm(cross(result.vertices[f[1]] - result.vertices[f[0]],
                     result.vertices[f[2]] - result.vertices[f[0]])) <= eps * scale)
-                return fail("Plane projection creates degenerate wall triangles; lower rim tolerance.");
+                return fail(curved
+                        ? "Curved fit creates degenerate triangles; volume withheld."
+                        : "Plane projection creates degenerate wall triangles; lower rim tolerance.");
         edges = edgesOf(faces);
 
         for (const auto &entry : edges)
@@ -601,7 +621,17 @@ namespace mw {
         result.capFaces.assign(faces.begin() + input.faces.size(), faces.end());
         result.volumeMm3 = std::abs(volume);
         result.volumeValid = true;
-        result.capStatus = "Closed single shell; estimated volume includes the flat cap.";
+        result.capStatus = curved ? "Closed single shell; estimated volume includes the fitted curved cap."
+                                    : "Closed single shell; estimated volume includes the flat cap.";
         return result;
+    }
+
+    Mesh closeFlatOpening(
+        const Mesh &input, int opening, double tolerance, const std::function<bool()> &cancel) {
+        return closeOpening(input, opening, tolerance, cancel, false);
+    }
+
+    Mesh closeCurvedOpening(const Mesh &input, int opening, const std::function<bool()> &cancel) {
+        return closeOpening(input, opening, 0, cancel, true);
     }
 } // namespace mw

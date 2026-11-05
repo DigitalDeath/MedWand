@@ -52,3 +52,21 @@ Additional boundary regression: maximum signed timestamp was accepted without sa
 Task 5: complete for the Windows simulator deliverable. Final release build succeeded. CTest: 4/4 passed (core, session, GUI, graphics_failure), 13.01 seconds. clang-format dry-run with warnings as errors passed. Real Windows renderer: NVIDIA GeForce RTX 4080, desktop OpenGL 4.6; application uses the documented ES2-common subset with desktop shader syntax. 6,000-point synthetic reconstruction produced 10,738 faces in 56 ms on this PC; no Pi speed inference. Visual inspection of docs/viewer-preview.png confirmed axes/grid, gold cloud, teal surface and all primary controls visible. Demo screenshot: 6,120 captures, 10,955 faces.
 
 Delivery: source in src/, test code in tests/, launcher Run MedicalWand.cmd, instructions README.md. No Git repository/branch exists, so merge/PR/worktree steps do not apply. Existing CAD and historical handoff content retained; CONTEXT.md now points to current implementation status.
+
+## 2026-11-04 — Curved inward cap
+
+Added optional wall-tangent curved closure using cubic radial curves and inward tessellated rings, fixed input/rim vertices, common center tangent plane, visibility-kernel restriction, bounded work and cancellation. Shares the flat cap manifold/orientation/intersection checks and volume calculation. UI toggles flat/curved, disables plane tolerance for curved mode, persists curved_cap in JSON and labels curved PLY faces. No measured closure or physical accuracy is implied.
+
+Verification: structured bowl and ordinary 6,000-point demo closure; near-vertical first-ring tangent; nonplanar fixed rim; reversed winding; unsupported concavity; full vertex budget; cancellation during ring generation; JSON old/new sessions; PLY curved vertices/labels; live Qt demo scan/flat-to-curved cap and graphics failure. Independent read-only review found no actionable correctness issues. Pi execution remains unverified.
+
+## 2026-11-04 — Curvature and disappearing preview fixes
+
+Replaced arbitrary cubic dome with one wall-derived quadratic curvature field, constrained by local first/second radial derivatives and a quintic fade at the center. Added shared angle-weighted rendering normals. The initial dome produced 110,911 mm3 for a known 90,729 mm3 full ellipsoid; corrected continuation gives 90,595 mm3 (about 0.15% faceting error). Per-vertex analytic ellipsoid residual, arbitrary rigid rotation, perturbed-rim tangent, nonplanar-rim and cancellation/budget tests cover the correction. Removing the local derivatives makes the perturbed tangent regression fail (dot 0.834 versus 0.998 with correction).
+
+An empty noncancelled worker result previously replaced a good preview, so the visibility checkbox had no surface to restore. Failed append-only updates now retain the prior compatible mesh and its original revision/count, show the failure diagnostic, and withhold stale numeric volume/surface export. A deterministic worker-result GUI regression failed before the change and passed after, including recovery and generation invalidation. Separate read-only review checked both fixes and prompted the local derivative correction. Actual Pi performance remains unverified.
+
+## 2026-11-04 — Checkbox-triggered surface loss
+
+User narrowed remaining disappearance to toggling points/cap during demo scanning. Cap controls shared the wall-settings invalidation path and erased the wall before rebuilding. Cap-only updates now advance generation/revision and cancel obsolete work while retaining the previous wall, clearing only cap faces and volume. Geometry settings/reset/undo retain full invalidation. Retained wall revisions still prevent stale volume/export.
+
+A separate rendering regression seeds stale depth and a disabled depth write mask; the old paint path could not clear depth and lost every surface pixel. paintGL now restores depth writes before clearing. Added framebuffer pixel checks and a live 3,000+ point demo regression that hides points and repeatedly toggles the cap while scanning. Both targeted regressions were observed failing before their fixes. Read-only review found no actionable issues in these changes.

@@ -6,6 +6,7 @@ namespace mw {
     struct MeshSettings {
         double mergeDistance = 0.5, maxEdge = 4.0;
         bool flatCap = false;
+        bool curvedCap = false;
         double capTolerance = 0.5;
         int capOpening = 0;
         bool radialCavity = false;

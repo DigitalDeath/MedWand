@@ -26,9 +26,10 @@ namespace mw {
         void keyPressEvent(QKeyEvent *) override;
 
         private:
+        friend struct MainWindowTestAccess;
         void updateReading();
         void capture();
-        void changed(bool invalidateMesh = true);
+        void changed(bool invalidateMesh = true, bool preserveWall = false);
         void tickWorker();
         void updateStatus();
         void refreshView();
@@ -52,6 +53,7 @@ namespace mw {
         std::array<QDoubleSpinBox *, 3> xyzControls_{};
         QDoubleSpinBox *merge_ = nullptr, *edge_ = nullptr;
         QCheckBox *flatCap_ = nullptr;
+        QCheckBox *curvedCap_ = nullptr;
         QDoubleSpinBox *capTolerance_ = nullptr;
         QSpinBox *capOpening_ = nullptr;
         QComboBox *reconstructionMode_ = nullptr;
@@ -68,5 +70,6 @@ namespace mw {
         std::vector<Snapshot> replay_;
         size_t replayIndex_ = 0;
         QString savePath_;
+        QString reconstructionFailure_;
     };
 } // namespace mw

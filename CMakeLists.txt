@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(MEDWAND_GUI "Build Qt desktop application" ON)
 option(MEDWAND_VIEWER "Build viewer as well as Qt persistence" ON)
 include(CTest)
-add_library(medwand_core src/core.cpp src/reconstruction.cpp src/flat_cap.cpp src/radial_reconstruction.cpp)
+add_library(medwand_core src/core.cpp src/reconstruction.cpp src/flat_cap.cpp src/curved_cap.cpp src/radial_reconstruction.cpp)
 target_include_directories(medwand_core PUBLIC src)
 
 if(MSVC)

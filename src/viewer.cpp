@@ -76,21 +76,38 @@ namespace mw {
         for (size_t i = 0; i < points.size(); i += stride)
             points_.push_back(vertex(points[i].position));
 
-        for (auto f : mesh.faces) {
-            Vec3 a = mesh.vertices[f[0]], b = mesh.vertices[f[1]], c = mesh.vertices[f[2]];
-            auto n = unit(cross(b - a, c - a));
-            triangles_.push_back(vertex(a, n));
-            triangles_.push_back(vertex(b, n));
-            triangles_.push_back(vertex(c, n));
-        }
+        // Shared angle-weighted normals remove the artificial faceted crease
+        // between a fitted lid and its cavity wall.
+        std::vector<Vec3> normals(mesh.vertices.size());
+        auto accumulateNormals = [&](const auto &faces) {
+            for (auto face : faces) {
+                Vec3 a = mesh.vertices[face[0]], b = mesh.vertices[face[1]], c = mesh.vertices[face[2]];
+                Vec3 normal = unit(cross(b - a, c - a));
 
-        for (auto f : mesh.capFaces) {
-            Vec3 a = mesh.vertices[f[0]], b = mesh.vertices[f[1]], c = mesh.vertices[f[2]];
-            Vec3 normal = unit(cross(b - a, c - a));
-            capTriangles_.push_back(vertex(a, normal));
-            capTriangles_.push_back(vertex(b, normal));
-            capTriangles_.push_back(vertex(c, normal));
-        }
+                for (int i = 0; i < 3; ++i) {
+                    Vec3 p = mesh.vertices[face[i]];
+                    Vec3 x = unit(mesh.vertices[face[(i + 1) % 3]] - p),
+                            y = unit(mesh.vertices[face[(i + 2) % 3]] - p);
+                    double angle = std::acos(std::clamp(dot(x, y), -1.0, 1.0));
+                    normals[face[i]] = normals[face[i]] + normal * angle;
+                }
+            }
+        };
+
+        accumulateNormals(mesh.faces);
+        accumulateNormals(mesh.capFaces);
+
+        for (auto &normal : normals)
+            normal = unit(normal);
+        auto appendTriangles = [&](const auto &faces, auto &triangles) {
+            for (auto face : faces) {
+                for (int id : face)
+                    triangles.push_back(vertex(mesh.vertices[id], normals[id]));
+            }
+        };
+
+        appendTriangles(mesh.faces, triangles_);
+        appendTriangles(mesh.capFaces, capTriangles_);
 
         for (int i = -5; i <= 5; ++i) {
             double d = i * 10.0;
@@ -192,6 +209,9 @@ namespace mw {
     }
 
     void Viewer::paintGL() {
+        // Depth clears honor the write mask. Restore it before clearing so
+        // incoming GL state cannot leave an old surface occluding every frame.
+        glDepthMask(GL_TRUE);
         glClearColor(0.035f, 0.055f, 0.08f, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

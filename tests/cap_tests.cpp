@@ -20,6 +20,115 @@ Mesh box() {
 
 int main() {
     try {
+        auto bowl = makeCapTestBowl();
+        auto curved = closeCurvedOpening(bowl, 0, [] {
+            return false;
+        });
+
+        std::cout << "Curved bowl: " << curved.capStatus << " volume=" << curved.volumeMm3 << '\n';
+        require(curved.volumeValid, "tangent bowl cap closes a valid shell");
+        const double fullEllipsoid = (4.0 / 3) * pi * 38 * 38 * 15;
+        require(std::abs(curved.volumeMm3 - fullEllipsoid) / fullEllipsoid < 0.008,
+            "curved closure continues the known ellipsoid curvature, without an arbitrary dome");
+
+        for (size_t i = bowl.vertices.size(); i < curved.vertices.size(); ++i) {
+            auto p = curved.vertices[i];
+            require(std::abs((p.x * p.x + p.y * p.y) / (38 * 38) + p.z * p.z / (15 * 15) - 1) < 0.005,
+                "every lid vertex follows the analytic cavity continuation");
+        }
+
+        require(curved.capFaces.size() > 96, "curved cap contains inward rings");
+        require(curved.volumeMm3 > 45364, "curved lid rises above flat bowl rim");
+
+        for (size_t i = 0; i < bowl.vertices.size(); ++i)
+            require(norm(bowl.vertices[i] - curved.vertices[i]) < 1e-12,
+                "curved cap preserves every input vertex");
+        Vec3 firstStep = curved.vertices[bowl.vertices.size()] - bowl.vertices[2209];
+        require(firstStep.z / norm(firstStep) > 0.99,
+            "first inward ring follows the nearly vertical bowl tangent");
+        auto warped = bowl;
+
+        for (auto &p : warped.vertices)
+            p.z += 2 * std::cos(2 * std::atan2(p.y, p.x));
+        auto warpedCap = closeCurvedOpening(warped, 0, [] {
+            return false;
+        });
+
+        require(warpedCap.volumeValid, "curved cap supports nonplanar rims without projection");
+
+        for (size_t i = 0; i < warped.vertices.size(); ++i)
+            require(norm(warped.vertices[i] - warpedCap.vertices[i]) < 1e-12, "nonplanar rim remains fixed");
+        auto fullBudget = bowl;
+        fullBudget.vertices.resize(20000);
+        auto budgetCap = closeCurvedOpening(fullBudget, 0, [] {
+            return false;
+        });
+
+        require(!budgetCap.volumeValid && budgetCap.vertices.size() == 20000,
+            "curved cap respects the total vertex budget");
+        auto reversedBowl = bowl;
+
+        for (auto &f : reversedBowl.faces)
+            std::swap(f[0], f[1]);
+        auto reversedCap = closeCurvedOpening(reversedBowl, 0, [] {
+            return false;
+        });
+
+        require(reversedCap.volumeValid && std::abs(reversedCap.volumeMm3 - curved.volumeMm3) < 1e-6,
+            "wall orientation does not change curved fit");
+        auto perturbedBowl = bowl;
+
+        for (int j = 0; j < 96; ++j) {
+            auto &p = perturbedBowl.vertices[2113 + j];
+            double radial = std::hypot(p.x, p.y);
+            p.x *= (radial + 0.4) / radial;
+            p.y *= (radial + 0.4) / radial;
+        }
+
+        auto perturbedCap = closeCurvedOpening(perturbedBowl, 0, [] {
+            return false;
+        });
+
+        require(perturbedCap.volumeValid, "small local wall curvature change supports closure");
+        Vec3 perturbedStep = unit(perturbedCap.vertices[bowl.vertices.size()] - perturbedBowl.vertices[2209]);
+        auto lip = perturbedBowl.vertices[2209], nearWall = perturbedBowl.vertices[2113],
+                fartherWall = perturbedBowl.vertices[2017];
+        double z1 = nearWall.z - lip.z, z2 = fartherWall.z - lip.z;
+        double slope1 = (nearWall.x - lip.x) / z1, slope2 = (fartherWall.x - lip.x) / z2;
+        double boundarySlope = (slope1 * z2 - slope2 * z1) / (z2 - z1);
+        Vec3 measuredTangent = unit(Vec3{boundarySlope, 0, 1});
+        std::cout << "Perturbed seam tangent dot: " << dot(perturbedStep, measuredTangent) << "\n";
+        require(dot(perturbedStep, measuredTangent) > 0.985,
+            "cap follows local wall slope beyond the global quadratic fit");
+        auto rotatedBowl = bowl;
+
+        for (auto &p : rotatedBowl.vertices) {
+            Vec3 q{p.x, std::cos(0.6) * p.y - std::sin(0.6) * p.z, std::sin(0.6) * p.y + std::cos(0.6) * p.z};
+            p = Vec3{std::cos(0.4) * q.x - std::sin(0.4) * q.y, std::sin(0.4) * q.x + std::cos(0.4) * q.y,
+                    q.z} +
+                Vec3{150, -200, 300};
+        }
+
+        auto rotatedCap = closeCurvedOpening(rotatedBowl, 0, [] {
+            return false;
+        });
+
+        std::cout << "Rotated cap: " << rotatedCap.capStatus << " volume=" << rotatedCap.volumeMm3 << "\n";
+        require(
+            rotatedCap.volumeValid && std::abs(rotatedCap.volumeMm3 - fullEllipsoid) / fullEllipsoid < 0.008,
+            "curvature continuation works after arbitrary rigid rotation and translation");
+        require(closeCurvedOpening(bowl, 0,
+                    [] {
+                        return true;
+                    })
+                    .cancelled,
+            "curved cap supports cancellation");
+        int curvedChecks = 0;
+        auto midCurve = closeCurvedOpening(bowl, 0, [&] {
+            return ++curvedChecks > 105;
+        });
+
+        require(midCurve.cancelled && !midCurve.volumeValid, "curved ring generation cancels during work");
         auto mesh = box();
         auto result = closeFlatOpening(mesh, 0, 0.1, [] {
             return false;
@@ -99,6 +208,12 @@ int main() {
 
         require(result.volumeValid && std::abs(result.volumeMm3 - 9) < 1e-8,
             "concave L-shaped prism volume is 9 mm3");
+        auto unsupported = closeCurvedOpening(concave, 0, [] {
+            return false;
+        });
+
+        require(!unsupported.volumeValid && unsupported.capFaces.empty(),
+            "rim outside radial kernel is explicitly rejected");
         MeshSettings settings;
         settings.flatCap = true;
         std::vector<Vec3> cloud;
@@ -119,6 +234,14 @@ int main() {
         std::cout << "Radial diagnostic: " << result.capStatus << " faces=" << result.faces.size()
                     << " openings=" << result.openings << '\n';
         require(result.volumeValid, "ordinary captured demo cloud closes in radial cavity mode");
+        auto curvedSettings = settings;
+        curvedSettings.curvedCap = true;
+        auto curvedDemo = reconstruct(cloud, curvedSettings, [] {
+            return false;
+        });
+
+        std::cout << "Curved demo: " << curvedDemo.capStatus << '\n';
+        require(curvedDemo.volumeValid, "ordinary demo supports curved closure");
         double reference = 0;
         constexpr int steps = 400;
 
