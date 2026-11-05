@@ -730,7 +730,7 @@ namespace mw {
 
         for (const auto &s : replay_)
             newest = std::max(newest, s.timestampUs);
-        clockOffset_ = std::max(std::int64_t(0), newest - clock_.nsecsElapsed() / 1000 + 1);
+        clockOffset_ = std::max<std::int64_t>(0, newest - clock_.nsecsElapsed() / 1000 + 1);
         sequence_ = 0;
 
         for (const auto &s : replay_)
