@@ -18,9 +18,11 @@ namespace mw {
         std::vector<std::array<int, 3>> capFaces;
         bool volumeValid = false;
         double volumeMm3 = 0;
+        double effectiveMergeDistance = 0;
         size_t openings = 0;
         std::string capStatus;
         bool cancelled = false, limited = false;
+        bool capBudgetLimited = false;
     };
 
     Mesh reconstruct(const std::vector<Vec3> &, MeshSettings, const std::function<bool()> &);

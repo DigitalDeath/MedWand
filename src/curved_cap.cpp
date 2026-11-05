@@ -263,8 +263,11 @@ namespace mw {
             std::min((19999 - int(input.vertices.size())) / int(rim.size()),
                 (40000 - int(input.faces.size())) / (2 * int(rim.size()))));
 
-        if (rings < 8)
+        if (rings < 8) {
+            result.capBudgetLimited = true;
             return fail("Insufficient mesh budget for curved closure.");
+        }
+
         std::vector<int> previous = rim;
 
         for (int ring = 1; ring < rings; ++ring) {

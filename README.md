@@ -42,7 +42,7 @@ The default **Radial cavity (+Z opening)** mode derives a center and scale from 
 
 Local preview retains the previous PCA/tangent-plane triangulation and can produce branching boundaries. It is useful for inspecting arbitrary samples but may not support volume. Raw captures are never merged or moved by either reconstruction mode. Cap projection affects only derived rim vertices within the selected tolerance.
 
-Merge distance and maximum connection distance govern estimated connectivity, not accuracy. Maximum connection must be at least twice merge distance. New sessions default to radial reconstruction with a **6 mm** connection limit. Triangles longer than that are omitted, leaving gaps instead of closing unsupported areas. Both modes cap working points at 20,000 and faces at 40,000; radial mode refuses an over-limit shell rather than claiming a volume from a truncated cloud. Its cancellable CPU triangulation has quadratic worst-case work, so Pi timing still needs measurement. Local mode uses at most 32 neighbors. Raw session limit is 100,000 captures; display uses at most 20,000 representative points.
+Merge distance and maximum connection distance govern estimated connectivity, not accuracy. Maximum connection must be at least twice merge distance. New sessions default to radial reconstruction with a **6 mm** connection limit. Triangles longer than that are omitted, leaving gaps instead of closing unsupported areas. Both modes cap working points at 20,000 and faces at 40,000; radial mode automatically increases the working voxel distance when needed and re-filters all captures, reserving room for the cover when closure is enabled. It reports the effective preview resolution and preserves raw captures and saved settings. Coarsening never exceeds half the maximum connection distance; an unsupported over-limit result still withholds volume. Its cancellable CPU triangulation has quadratic worst-case work, so Pi timing still needs measurement. Local mode uses at most 32 neighbors. Raw session limit is 100,000 captures; display uses at most 20,000 representative points.
 
 This local method can still create overlapping or incorrect patches near close sheets, sharp features or uneven coverage. It is an **open preview mesh**. Sparse measurements do not establish a solid or physical accuracy. The optional flat-cap operation below reports estimated volume only when the resulting mesh passes its geometric checks.
 
@@ -61,6 +61,10 @@ For the normal workflow, keep **Radial cavity (+Z opening)** selected, run **Sta
 For a separate geometric check, **Load cap test bowl** loads the clearly labeled structured half-ellipsoid fixture (38 mm radius, 15 mm depth). Its faceted volume is approximately **45.2837 mL**, within 0.3% of the ideal 45.3646 mL. This known-topology fixture remains distinct from the regular demo, whose new closure is reconstructed from captured points. Capturing/undoing points or starting a scan exits fixture mode.
 
 Cap settings and synthetic fixture provenance persist in JSON; older sessions default to no cap. PLY includes cap triangles and cap/volume comments when exporting a current mesh. Numeric volume disappears while a newer point/settings revision is processing.
+
+## STL export
+
+Enable **Close opening + estimated volume** and select the flat or curved cover. Stop acquisition and wait for a valid estimated volume. **Export closed cavity + cover as STL** writes one closed, outward-oriented triangular surface containing both the cavity wall and its cover. The button stays disabled for incomplete or stale results. STL coordinates are in millimeters; select millimeters when importing into CAD or a slicer because STL has no standard units field. The inferred cover is part of the exported geometry. CSV and PLY remain available for raw/open geometry.
 
 ## Build on Raspberry Pi 4
 

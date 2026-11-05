@@ -7,6 +7,8 @@
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <iostream>
+#include <locale>
+#include <sstream>
 #include <stdexcept>
 void require(bool ok, const char *why) {
     if (!ok)
@@ -131,6 +133,51 @@ int main(int argc, char **argv) {
             "PLY identifies inferred curved closure");
         require(curvedContents.contains("element vertex " + QByteArray::number(curvedClosed.vertices.size())),
             "PLY includes curved interior vertices");
+        auto stlFile = dir.filePath("cavity.stl");
+        require(mw::exportStl(stlFile, bowl, &curvedClosed, error), "export closed curved cavity as STL");
+        QFile stl(stlFile);
+        require(stl.open(QIODevice::ReadOnly), "read STL");
+        auto stlContents = stl.readAll();
+        require(stlContents.count("facet normal ") ==
+                int(curvedClosed.faces.size() + curvedClosed.capFaces.size()),
+            "STL includes every wall and cover triangle");
+        require(stlContents.startsWith("solid MedicalWand_mm\n") &&
+                stlContents.endsWith("endsolid MedicalWand_mm\n"),
+            "STL identifies millimeter coordinates");
+        stl.close();
+        std::istringstream stlInput(stlContents.toStdString());
+        stlInput.imbue(std::locale::classic());
+        std::string token;
+        std::vector<mw::Vec3> stlVertices;
+
+        while (stlInput >> token) {
+            if (token == "vertex") {
+                mw::Vec3 vertex;
+                require(bool(stlInput >> vertex.x >> vertex.y >> vertex.z), "STL vertex parses");
+                stlVertices.push_back(vertex);
+            }
+        }
+
+        require(stlVertices.size() == 3 * (curvedClosed.faces.size() + curvedClosed.capFaces.size()),
+            "STL triangle records parse completely");
+        double stlVolume = 0;
+        auto stlOrigin = stlVertices.front();
+
+        for (size_t i = 0; i < stlVertices.size(); i += 3)
+            stlVolume += mw::dot(stlVertices[i] - stlOrigin,
+                                mw::cross(stlVertices[i + 1] - stlOrigin, stlVertices[i + 2] - stlOrigin)) /
+                6;
+        require(std::abs(stlVolume - curvedClosed.volumeMm3) / curvedClosed.volumeMm3 < 1e-10,
+            "exported STL preserves outward orientation and cavity volume");
+        require(!mw::exportStl(stlFile, bowl, nullptr, error), "stale or missing surface cannot export STL");
+        require(!mw::exportStl(stlFile, bowl, &fixture, error), "open cavity cannot export solid STL");
+        auto invalidStl = curvedClosed;
+        invalidStl.capFaces.pop_back();
+        require(!mw::exportStl(stlFile, bowl, &invalidStl, error),
+            "STL rejects broken closure even with old volume flag");
+        require(stl.open(QIODevice::ReadOnly) && stl.readAll() == stlContents,
+            "rejected export preserves existing STL");
+        stl.close();
         bowl.captures.points[0].position.x += 1;
         require(!mw::saveSession(file, bowl, error), "edited data cannot retain known fixture topology");
         std::cout << "Session checks passed\n";

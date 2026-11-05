@@ -70,3 +70,15 @@ An empty noncancelled worker result previously replaced a good preview, so the v
 User narrowed remaining disappearance to toggling points/cap during demo scanning. Cap controls shared the wall-settings invalidation path and erased the wall before rebuilding. Cap-only updates now advance generation/revision and cancel obsolete work while retaining the previous wall, clearing only cap faces and volume. Geometry settings/reset/undo retain full invalidation. Retained wall revisions still prevent stale volume/export.
 
 A separate rendering regression seeds stale depth and a disabled depth write mask; the old paint path could not clear depth and lost every surface pixel. paintGL now restores depth writes before clearing. Added framebuffer pixel checks and a live 3,000+ point demo regression that hides points and repeatedly toggles the cap while scanning. Both targeted regressions were observed failing before their fixes. Read-only review found no actionable issues in these changes.
+
+## 2026-11-04 - Closed cavity STL export
+
+Added ASCII STL export of the cavity wall and selected flat/curved cover as one outward-oriented closed triangular surface. Export requires a current validated enclosed volume; UI disables stale/open output and rechecks revision after the save dialog. Export checks finite coordinates, indices, degeneracy and oriented closed edges, and writes atomically. Coordinates are millimeters; STL itself has no standard units field.
+
+Tests parse every exported triangle and independently recover signed volume, check cover/wall face counts, reject stale/open/broken closure and preserve existing files on failure. GUI checks enablement for valid closure and disablement after cover removal. Windows build, five CTest cases and formatting checks pass. Refreshed the existing standalone EXE and portable ZIP, and verified the standalone embeds the tested build. Read-only review found no actionable STL issues.
+
+## 2026-11-04 - Reserve cover budget for dense radial scans
+
+Screenshot at 29,320 captures showed a retained 39,757-face wall, no cap, insufficient closure budget and subsequent radial work-limit failures. Radial voxel filtering now increases derived merge distance in bounded 25% steps and re-filters the full capture set until within 16,000 working wall vertices when a cover is enabled (20,000 otherwise). It reserves closure capacity and records effectiveMergeDistance for the UI. Raw captures and requested settings remain unchanged. Working merge cannot exceed half max connection distance, and all prior coverage/manifold/intersection checks remain active. Regression cases at 30,000 and 100,000 captures fail before the fix and close with a curved cap afterward within the total 20k/40k mesh limits.
+
+A read-only review identified large rims that need more than the initial reserve. Curved closure now flags budget-only rejection and radial reconstruction retries coarsening within the same connection bound. A 15,200-point ellipsoid fixture with a 1,200-sample rim reproduced insufficient budget before this retry and closes afterward. Other closure failures are not bypassed or retried.

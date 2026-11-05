@@ -369,6 +369,28 @@ namespace mw {
                 error(message);
         });
 
+        exportStlButton_ = new QPushButton("Export closed cavity + cover as STL\u2026");
+        exportStlButton_->setObjectName("exportStl");
+        exportStlButton_->setToolTip("Exports the wall and selected cover together, in millimeters. Requires "
+                                        "a current valid enclosed volume.");
+        surface->addWidget(exportStlButton_);
+        connect(exportStlButton_, &QPushButton::clicked, this, [this] {
+            QString path = QFileDialog::getSaveFileName(
+                this, "Export closed cavity and cover (millimeters)", {}, "STL (*.stl)");
+
+            if (path.isEmpty())
+                return;
+
+            if (!path.endsWith(".stl", Qt::CaseInsensitive))
+                path += ".stl";
+            QString message;
+
+            if (!exportStl(path, session_, revision_.accepts(meshRevision_) ? &mesh_ : nullptr, message))
+                error(message);
+            else
+                statusBar()->showMessage("Closed cavity and cover exported in millimeters.", 5000);
+        });
+
         sideLayout->addStretch();
 
         auto scroll = new QScrollArea;
@@ -613,6 +635,8 @@ namespace mw {
     }
 
     void MainWindow::updateStatus() {
+        exportStlButton_->setEnabled(revision_.accepts(meshRevision_) && mesh_.volumeValid &&
+            !mesh_.cancelled && !mesh_.limited && !mesh_.capFaces.empty());
         pointCount_->setText(QString("%1 / 100,000 raw captures").arg(session_.captures.points.size()));
 
         if (session_.volumeTestBowl)
@@ -629,6 +653,11 @@ namespace mw {
 
         if (pending_ || worker_.valid())
             text += "\nUpdating surface…";
+
+        if (meshRevision_ && mesh_.effectiveMergeDistance > session_.settings.mergeDistance * (1 + 1e-9))
+            text += QString(
+                "\nPreview resolution adjusted to %1 mm to fit the mesh budget; raw captures unchanged.")
+                        .arg(mesh_.effectiveMergeDistance, 0, 'f', 3);
 
         if (!reconstructionFailure_.isEmpty()) {
             text += "\n" + reconstructionFailure_;

@@ -140,6 +140,12 @@ int main(int argc, char **argv) {
     auto viewer = window.findChild<mw::Viewer *>();
     auto source = window.findChild<QComboBox *>("source");
     auto cap = window.findChild<QCheckBox *>("flatCap");
+    auto stlExport = window.findChild<QPushButton *>("exportStl");
+
+    if (!stlExport || stlExport->isEnabled()) {
+        std::cerr << "STL export must be disabled without a closed current surface\n";
+        return 1;
+    }
 
     auto curvedCap = window.findChild<QCheckBox *>("curvedCap");
 
@@ -369,6 +375,11 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (!stlExport->isEnabled()) {
+        std::cerr << "Closed current cavity did not enable STL export\n";
+        return 1;
+    }
+
     std::cout << "Regular captured scan capped: " << status->text().toStdString() << '\n';
     curvedCap->setChecked(true);
     volumeClock.restart();
@@ -417,7 +428,7 @@ int main(int argc, char **argv) {
     cap->setChecked(false);
     QTest::qWait(1500);
 
-    if (status->text().contains("Estimated volume:")) {
+    if (stlExport->isEnabled() || status->text().contains("Estimated volume:")) {
         std::cerr << "Volume persisted after removing cap\n";
         return 1;
     }

@@ -6,7 +6,9 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QTextStream>
+#include <algorithm>
 #include <limits>
+#include <map>
 #include <stdexcept>
 
 namespace mw {
@@ -291,6 +293,66 @@ namespace mw {
                 out << '\n';
             }
 
+            out.flush();
+            return write(path, text.toUtf8(), error);
+        } catch (const std::exception &e) {
+            error = e.what();
+            return false;
+        }
+    }
+
+    bool exportStl(const QString &path, const Session &s, const Mesh *mesh, QString &error) {
+        try {
+            encode(s);
+            ensure(s.settings.flatCap && mesh && mesh->volumeValid && !mesh->cancelled && !mesh->limited &&
+                    !mesh->faces.empty() && !mesh->capFaces.empty(),
+                "STL requires a current closed cavity with a cover. Stop scanning and wait for a valid "
+                "volume.");
+            ensure(std::isfinite(mesh->volumeMm3) && mesh->volumeMm3 > 0, "Invalid enclosed volume");
+            auto faces = mesh->faces;
+            faces.insert(faces.end(), mesh->capFaces.begin(), mesh->capFaces.end());
+            ensure(faces.size() <= 40000 && mesh->vertices.size() <= 20000, "STL exceeds mesh limits");
+            std::map<std::pair<int, int>, std::pair<int, int>> edges;
+
+            for (auto face : faces) {
+                for (int id : face)
+                    ensure(id >= 0 && size_t(id) < mesh->vertices.size() && finite(mesh->vertices[id]),
+                        "Invalid STL vertex");
+                Vec3 normal = cross(mesh->vertices[face[1]] - mesh->vertices[face[0]],
+                    mesh->vertices[face[2]] - mesh->vertices[face[0]]);
+                ensure(finite(normal) && norm(normal) > 0, "Degenerate STL triangle");
+
+                for (int i = 0; i < 3; ++i) {
+                    int a = face[i], b = face[(i + 1) % 3];
+                    auto &edge = edges[std::minmax(a, b)];
+                    ++edge.first;
+                    edge.second += a < b ? 1 : -1;
+                }
+            }
+
+            for (const auto &entry : edges)
+                ensure(entry.second.first == 2 && entry.second.second == 0,
+                    "STL mesh is not consistently oriented and closed");
+            QString text;
+            QTextStream out(&text);
+            out.setRealNumberPrecision(17);
+            out << "solid MedicalWand_mm\n";
+
+            for (auto face : faces) {
+                Vec3 normal = unit(cross(mesh->vertices[face[1]] - mesh->vertices[face[0]],
+                    mesh->vertices[face[2]] - mesh->vertices[face[0]]));
+                out << "  facet normal " << normal.x << ' ' << normal.y << ' ' << normal.z
+                    << "\n    outer loop\n";
+
+                for (int id : face) {
+                    auto p = mesh->vertices[id];
+                    out << "      vertex " << p.x << ' ' << p.y << ' ' << p.z << '\n';
+                }
+
+                out << "    endloop\n  endfacet\n";
+            }
+
+            out << "endsolid MedicalWand_mm\n";
             out.flush();
             return write(path, text.toUtf8(), error);
         } catch (const std::exception &e) {

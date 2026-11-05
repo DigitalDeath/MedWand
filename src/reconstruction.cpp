@@ -327,15 +327,25 @@ namespace mw {
 
     Mesh reconstruct(
         const std::vector<Vec3> &points, MeshSettings settings, const std::function<bool()> &cancel) {
-        Mesh mesh = settings.radialCavity ? reconstructRadial(points, settings, cancel)
-                                            : reconstructOpen(points, settings, cancel);
+        MeshSettings working = settings;
 
-        if (settings.flatCap && !mesh.cancelled && !mesh.faces.empty()) {
-            if (settings.curvedCap)
-                return closeCurvedOpening(mesh, settings.capOpening, cancel);
-            return closeFlatOpening(mesh, settings.capOpening, settings.capTolerance, cancel);
+        for (;;) {
+            Mesh mesh = working.radialCavity ? reconstructRadial(points, working, cancel)
+                                                : reconstructOpen(points, working, cancel);
+
+            if (working.flatCap && !mesh.cancelled && !mesh.faces.empty()) {
+                mesh = working.curvedCap
+                    ? closeCurvedOpening(mesh, working.capOpening, cancel)
+                    : closeFlatOpening(mesh, working.capOpening, working.capTolerance, cancel);
+            }
+
+            if (!working.radialCavity || !mesh.capBudgetLimited || mesh.cancelled)
+                return mesh;
+            double next = std::min(mesh.effectiveMergeDistance * 1.25, working.maxEdge * 0.5);
+
+            if (next <= working.mergeDistance)
+                return mesh;
+            working.mergeDistance = next;
         }
-
-        return mesh;
     }
 } // namespace mw

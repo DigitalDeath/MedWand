@@ -289,6 +289,7 @@ namespace mw {
         const Mesh &input, int opening, double tolerance, const std::function<bool()> &cancel, bool curved) {
         Mesh result = input;
         result.capFaces.clear();
+        result.capBudgetLimited = false;
         result.volumeValid = false;
         result.volumeMm3 = 0;
         result.openings = 0;

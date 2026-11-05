@@ -242,6 +242,57 @@ int main() {
 
         std::cout << "Curved demo: " << curvedDemo.capStatus << '\n';
         require(curvedDemo.volumeValid, "ordinary demo supports curved closure");
+
+        for (int count : {30000, 100000}) {
+            std::vector<Vec3> dense;
+
+            for (int i = 0; i < count; ++i)
+                dense.push_back(simulate(i, 0).position);
+            auto denseSettings = settings;
+            denseSettings.curvedCap = true;
+            auto denseResult = reconstruct(dense, denseSettings, [] {
+                return false;
+            });
+
+            std::cout << "Dense closure " << count << ": " << denseResult.capStatus << '\n';
+            require(denseResult.effectiveMergeDistance > denseSettings.mergeDistance,
+                "dense preview reports its automatically coarsened working resolution");
+            require(denseResult.volumeValid && !denseResult.capFaces.empty(),
+                "dense scans reserve enough mesh budget for the curved cover");
+            require(denseResult.vertices.size() <= 20000 &&
+                    denseResult.faces.size() + denseResult.capFaces.size() <= 40000,
+                "adaptive closure stays within total mesh limits");
+            require(
+                dense.size() == size_t(count) && norm(dense.back() - simulate(count - 1, 0).position) < 1e-12,
+                "adaptive preview preserves raw captures");
+        }
+
+        std::vector<Vec3> wideRimCloud;
+
+        for (int i = 0; i < 14000; ++i) {
+            double theta = pi / 2 + 0.01 + (pi / 2 - 0.012) * (i + 0.5) / 14000;
+            double phi = 2 * pi * std::fmod(i * 0.6180339887498948, 1.0);
+            wideRimCloud.push_back({100 * std::sin(theta) * std::cos(phi),
+                100 * std::sin(theta) * std::sin(phi), 30 * std::cos(theta)});
+        }
+
+        for (int i = 0; i < 1200; ++i) {
+            double phi = 2 * pi * i / 1200;
+            wideRimCloud.push_back({100 * std::cos(phi), 100 * std::sin(phi), 0});
+        }
+
+        auto wideSettings = settings;
+        wideSettings.curvedCap = true;
+        wideSettings.maxEdge = 10;
+        auto wideResult = reconstruct(wideRimCloud, wideSettings, [] {
+            return false;
+        });
+
+        require(wideResult.volumeValid && wideResult.effectiveMergeDistance > 0.5,
+            "large opening retries coarsening when the cover needs more than the reserved budget");
+        require(wideResult.vertices.size() <= 20000 &&
+                wideResult.faces.size() + wideResult.capFaces.size() <= 40000,
+            "large opening and wall share the total work budget");
         double reference = 0;
         constexpr int steps = 400;
 

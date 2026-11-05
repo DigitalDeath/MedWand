@@ -52,37 +52,60 @@ namespace mw {
         std::set<std::array<int, 3>> cells;
         Vec3 lo{1e100, 1e100, 1e100}, hi{-1e100, -1e100, -1e100};
 
-        for (size_t i = 0; i < input.size(); ++i) {
-            if ((i % 128) == 0 && cancel()) {
-                mesh.cancelled = true;
-                return mesh;
+        const size_t vertexBudget = settings.flatCap ? 16000 : 20000;
+        double workingMerge = settings.mergeDistance;
+
+        for (;;) {
+            mesh.vertices.clear();
+            cells.clear();
+            lo = {1e100, 1e100, 1e100};
+            hi = {-1e100, -1e100, -1e100};
+            mesh.effectiveMergeDistance = workingMerge;
+            bool overflow = false;
+
+            for (size_t i = 0; i < input.size(); ++i) {
+                if ((i % 128) == 0 && cancel()) {
+                    mesh.cancelled = true;
+                    return mesh;
+                }
+
+                Vec3 p = input[i];
+
+                if (!finite(p) || std::max({std::abs(p.x), std::abs(p.y), std::abs(p.z)}) > 100000)
+                    continue;
+                std::array<int, 3> key{int(std::floor(p.x / workingMerge)),
+                    int(std::floor(p.y / workingMerge)), int(std::floor(p.z / workingMerge))};
+
+                if (!cells.insert(key).second)
+                    continue;
+
+                if (mesh.vertices.size() >= vertexBudget) {
+                    overflow = true;
+                    break;
+                }
+
+                mesh.vertices.push_back(p);
+                lo = {std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
+                hi = {std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
             }
 
-            Vec3 p = input[i];
+            if (!overflow)
+                break;
+            double next = std::min(workingMerge * 1.25, settings.maxEdge * 0.5);
 
-            if (!finite(p) || std::max({std::abs(p.x), std::abs(p.y), std::abs(p.z)}) > 100000)
-                continue;
-            std::array<int, 3> key{int(std::floor(p.x / settings.mergeDistance)),
-                int(std::floor(p.y / settings.mergeDistance)), int(std::floor(p.z / settings.mergeDistance))};
-
-            if (!cells.insert(key).second)
-                continue;
-
-            if (mesh.vertices.size() >= 20000) {
+            if (next <= workingMerge) {
                 mesh.limited = true;
-                return fail("Radial work limit reached; increase merge distance or use local preview.");
+                return fail("Radial preview cannot fit within the work limit at this connection distance.");
             }
 
-            mesh.vertices.push_back(p);
-            lo = {std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
-            hi = {std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+            workingMerge = next;
         }
 
         if (mesh.vertices.size() < 100)
             return fail("More cavity coverage is needed (at least 100 filtered points).");
         Vec3 center = (lo + hi) * 0.5, half = (hi - lo) * 0.5;
 
-        if (std::min({half.x, half.y, half.z}) < settings.mergeDistance * 2)
+        if (std::min({half.x, half.y, half.z}) < workingMerge * 2)
             return fail("Radial cavity needs a three-dimensional wall, not a plane.");
         std::vector<Point> projected;
         std::array<bool, 24> sectors{};

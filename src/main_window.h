@@ -47,7 +47,7 @@ namespace mw {
         Viewer *viewer_ = nullptr;
         QLabel *position_ = nullptr, *pointCount_ = nullptr, *meshStatus_ = nullptr, *sourceStatus_ = nullptr,
                 *graphics_ = nullptr;
-        QPushButton *capture_ = nullptr, *demo_ = nullptr;
+        QPushButton *capture_ = nullptr, *demo_ = nullptr, *exportStlButton_ = nullptr;
         QComboBox *source_ = nullptr;
         std::array<QDoubleSpinBox *, 5> jointControls_{};
         std::array<QDoubleSpinBox *, 3> xyzControls_{};

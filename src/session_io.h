@@ -20,5 +20,6 @@ namespace mw {
     bool saveSession(const QString &, const Session &, QString &error);
     bool loadSession(const QString &, Session &, QString &error);
     bool exportCsv(const QString &, const Session &, QString &error);
+    bool exportStl(const QString &, const Session &, const Mesh *, QString &error);
     bool exportPly(const QString &, const Session &, const Mesh *, QString &error);
 } // namespace mw
